@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Çalışma Zamanı Dilimi</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px;
+      background: #f5f6fa;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+      padding: 24px;
+      width: 800px;
+      position: relative;
+    }
+
+    label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 6px;
+      color: #222;
+    }
+
+    input[type="text"], input[type="checkbox"] {
+      font-size: 1.1rem;
+      border-radius: 6px;
+      border: 1px solid #d1d9e6;
+      box-sizing: border-box;
+      background: #fefefe;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      position: relative;
+      z-index: 2; /* ✅ Yazı her zaman üstte kalsın */
+    }
+
+    /* ✅ Progress artık yazının altında olacak */
+    .progress {
+      position: absolute;
+      bottom: 4px; /* input'un altına doğru */
+      left: 2px;
+      height: 6px;
+      border-radius: 3px;
+      width: 0%;
+      z-index: 1; /* yazının ALTINDA */
+      transition: width 0.4s ease;
+    }
+
+    .input-wrapper {
+      position: relative;
+      width: 100%;
+      margin-bottom: 16px;
+      padding-bottom: 8px; /* progress için boşluk bırak */
+    }
+
+    .note {
+      font-size: 0.9rem;
+      color: #555;
+    }
+
+    .readonly {
+      background: #e1e4e8 !important;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    /* ✅ Sağ alt köşe kontrol alanı */
+    .rule-control {
+      position: absolute;
+      right: 20px;
+      bottom: 20px;
+      text-align: right;
+    }
+
+    .rule-control label {
+      font-weight: 500;
+      font-size: 0.9rem;
+      display: inline-block;
+      margin-left: 4px;
+    }
+
+    .rule-control input[type="checkbox"] {
+      transform: scale(1.3);
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <label for="timeBox">Saat</label>
+    <input id="timeBox" type="text" readonly aria-label="Sistem saati" />
+
+    <label for="sectorBox">Aktif Çalışma Zamanı Dilimi</label>
+    <input id="sectorBox" type="text" readonly aria-label="Sektör durumu" />
+
+    <label>A - 09:00 / 11:00</label>
+    <div class="input-wrapper"><input id="boxA" type="text" placeholder="TO DO" /><div class="progress" id="progA"></div></div>
+
+    <label>B - 11:00 / 12:30</label>
+    <div class="input-wrapper"><input id="boxB" type="text" placeholder="TO DO" /><div class="progress" id="progB"></div></div>
+
+    <label>C - 13:30 / 15:30</label>
+    <div class="input-wrapper"><input id="boxC" type="text" placeholder="TO DO" /><div class="progress" id="progC"></div></div>
+
+    <label>D - 15:30 / 17:30 </label>
+    <div class="input-wrapper"><input id="boxD" type="text" placeholder="TO DO" /><div class="progress" id="progD"></div></div>
+
+    <label>E - 17:30 / 18:30</label>
+    <div class="input-wrapper"><input id="boxE" type="text" placeholder="TO DO" /><div class="progress" id="progE"></div></div>
+
+    <div class="note">
+      muhammeddeniz.work<br>
+      <code>Ekim/2025</code>
+    </div>
+
+    <div class="rule-control">
+      <div>
+        <input type="checkbox" id="ruleCheckbox" checked />
+        <label for="ruleCheckbox">Kurallar Etkin</label>
+      </div>
+      <div style="margin-top:8px;">
+        <input type="checkbox" id="endDayCheckbox" />
+        <label for="endDayCheckbox">Mesaiyi Bitir</label>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const timeBox = document.getElementById("timeBox");
+    const sectorBox = document.getElementById("sectorBox");
+    const ruleCheckbox = document.getElementById("ruleCheckbox");
+    const endDayCheckbox = document.getElementById("endDayCheckbox");
+
+    const sectors = [
+      { id: "A", start:  9.0, end: 11.0, label: "A. ☀️ Sabah (09:00 / 11:00) 2 saat" },
+      { id: "B", start: 11.0, end: 12.5, label: "B. 🌅 Öğlene Doğru (11:00 / 12:30) 1.5 saat" },
+      { id: "C", start: 13.5, end: 15.5, label: "C. ☕ İkindi (13:30 / 15:30) 2 saat" },
+      { id: "D", start: 15.5, end: 17.5, label: "D. 🌇 Akşama Doğru (15:30 / 17:30) 2 saat" },
+      { id: "E", start: 17.5, end: 18.5, label: "E. 🌌 Gün Sonu (17:30 / 18:30) 1 saat" },
+    ];
+
+    let hasSavedToday = false;
+
+    function formatTime(date) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+
+    function updateSectorVisuals(hour) {
+      const rulesActive = ruleCheckbox.checked;
+
+      sectors.forEach((s) => {
+        const box = document.getElementById("box" + s.id);
+        const prog = document.getElementById("prog" + s.id);
+
+        if (!rulesActive) {
+          prog.style.width = "0%";
+          prog.style.background = "none";
+          box.readOnly = false;
+          box.classList.remove("readonly");
+          return;
+        }
+
+        if (hour >= s.end) {
+          box.readOnly = true;
+          box.classList.add("readonly");
+          prog.style.width = "100%";
+          prog.style.background = "#ccc";
+        } else if (hour >= s.start && hour < s.end) {
+          const total = s.end - s.start;
+          const elapsed = hour - s.start;
+          const percent = Math.min(100, Math.max(0, (elapsed / total) * 100));
+          prog.style.width = percent + "%";
+          prog.style.background = "linear-gradient(90deg, #81c784, #4caf50)";
+          box.readOnly = false;
+          box.classList.remove("readonly");
+        } else {
+          prog.style.width = "0%";
+          prog.style.background = "none";
+          box.readOnly = false;
+          box.classList.remove("readonly");
+        }
+      });
+    }
+
+    function Sector() {
+      const now = new Date();
+	  //const now = new Date(2025, 10, 8, 12, 33, 0);
+      const h = now.getHours() + now.getMinutes() / 60;
+      let active = sectors.find((s) => h >= s.start && h < s.end);
+      let message = active ? active.label : "F. Mesai Dışı 🌙";
+      sectorBox.value = message;
+      updateSectorVisuals(h);
+    }
+
+    function saveDailyReport(triggerSource = "Otomatik") {
+      if (hasSavedToday) return;
+      hasSavedToday = true;
+
+      const now = new Date();
+      const dateStr = now.toISOString().split("T")[0];
+      let content = `📅 Tarih: ${dateStr}\n💾 Kayıt Türü: ${triggerSource}\n\n`;
+
+      sectors.forEach((s) => {
+        const val = document.getElementById("box" + s.id).value || "(boş)";
+        content += `${s.label} → ${val}\n`;
+      });
+
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `ÇalışmaVerileri-${dateStr}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function updateAll() {
+      const now = new Date();
+      timeBox.value = formatTime(now);
+      Sector();
+
+      if (!hasSavedToday && now.getHours() === 16 && now.getMinutes() === 30 && now.getSeconds() === 0) {
+        saveDailyReport("Otomatik (16:30)");
+      }
+    }
+
+    endDayCheckbox.addEventListener("change", () => {
+      if (endDayCheckbox.checked) {
+        saveDailyReport("Manuel (Mesaiyi Bitir)");
+      }
+    });
+
+    updateAll();
+    setInterval(updateAll, 1000);
+  </script>
+
+</body>
+</html>
